@@ -1,0 +1,38 @@
+# Desktop (Linux/macOS) build of the p2f C library and the p2f-cli test tool.
+#   make -f Makefile.host
+
+CC       ?= cc
+MBEDTLS  := third_party/mbedtls
+CJSON    := third_party/cJSON
+BUILD    := build/host
+
+CFLAGS   := -O2 -Wall -Wextra -Icore -I$(MBEDTLS)/include -I$(CJSON) \
+            -DMBEDTLS_CONFIG_FILE='"p2f_mbedtls_config.h"'
+
+MBED_SRC := $(wildcard $(MBEDTLS)/library/*.c)
+CORE_SRC := core/p2f_client.c core/p2f_http.c core/p2f_crypto.c \
+            core/p2f_download.c core/p2f_tls.c core/p2f_dns.c core/ca_bundle.c core/platform_posix.c $(CJSON)/cJSON.c
+
+MBED_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(MBED_SRC))
+CORE_OBJ := $(patsubst %.c,$(BUILD)/%.o,$(CORE_SRC))
+
+all: $(BUILD)/p2f-cli
+
+$(BUILD)/p2f-cli: $(BUILD)/tools/p2f_cli.o $(CORE_OBJ) $(MBED_OBJ)
+	$(CC) -o $@ $^
+
+$(BUILD)/$(MBEDTLS)/%.o: $(MBEDTLS)/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -w -c -o $@ $<
+
+$(BUILD)/%.o: %.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# Every object depends on the mbedTLS config.
+$(CORE_OBJ) $(MBED_OBJ) $(BUILD)/tools/p2f_cli.o: core/p2f_mbedtls_config.h
+
+clean:
+	rm -rf $(BUILD)
+
+.PHONY: all clean

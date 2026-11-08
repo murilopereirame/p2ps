@@ -49,11 +49,21 @@ edit or check out another commit inside `p2f-lib/` and run `make` again.
 
 ### CI
 
-`.github/workflows/build-pkg.yml` builds the `.pkg` on every merge to `main`
-and when started by hand (Actions -> "Build PS4 pkg" -> Run workflow; you can
-name a p2f-lib branch to build against). The `.pkg` is a workflow artifact,
-and builds from `main` also update the
-[`latest` pre-release](../../releases/tag/latest).
+`.github/workflows/build-pkg.yml` builds the `.pkg` on every merge to `main`,
+on every published GitHub release, and when started by hand (Actions ->
+"Build PS4 pkg" -> Run workflow; you can name a p2f-lib branch to build
+against). The `.pkg` is always a workflow artifact. Builds from `main` also
+update the [`latest` pre-release](../../releases/tag/latest), and a release
+build attaches `p2f-ps4-<tag>.pkg` to its release.
+
+`.github/workflows/bump-version.yml` ("Bump version", run by hand) is
+separate: it only raises `VERSION` in the `Makefile` (the app version the PS4
+shows, `XX.YY`) and commits that to `main`. Pick `minor` (1.00 -> 1.01),
+`major` (1.07 -> 2.00), or type an exact version. Locally:
+`scripts/bump_version.sh minor`.
+
+To release: run "Bump version", then publish a release with a tag such as
+`v1.01`.
 
 `PkgTool.Core` (from the toolchain) needs OpenSSL **1.1**. If the build stops with
 "No usable version of libssl was found", put `libssl.so.1.1` and `libcrypto.so.1.1`
@@ -130,8 +140,8 @@ See [p2f-lib](https://github.com/murilopereirame/p2f-lib) (`include/p2f.h`).
 To move to a new p2f-lib version:
 
 ```sh
-git -C p2f-lib fetch --tags && git -C p2f-lib checkout v0.3.0
-git add p2f-lib && git commit -m "Use p2f-lib 0.3.0"
+git -C p2f-lib fetch --tags && git -C p2f-lib checkout v0.4.0
+git add p2f-lib && git commit -m "Use p2f-lib 0.4.0"
 ```
 
 ## Licenses

@@ -1,14 +1,17 @@
-# Build the PS4 .pkg on every merge to main, or by hand (Actions tab ->
-# "Build PS4 pkg" -> Run workflow).
+# Build the PS4 .pkg on every merge to main, on every published GitHub
+# release, or by hand (Actions tab -> "Build PS4 pkg" -> Run workflow).
 #
-# The pkg is kept as a workflow artifact. A build from main also updates the
-# "latest" pre-release, so the newest pkg is always at
-# https://github.com/<owner>/<repo>/releases/tag/latest
+# The pkg is kept as a workflow artifact.
+#   - A build from main also updates the "latest" pre-release, so the newest
+#     pkg is always at https://github.com/<owner>/<repo>/releases/tag/latest
+#   - A build for a release attaches the pkg to that release.
 name: Build PS4 pkg
 
 on:
   push:
     branches: [main]
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       p2f_lib_ref:
@@ -74,7 +77,11 @@ jobs:
         id: pkg
         run: |
           src=$(ls *.pkg)
-          name="p2f-ps4-$(git rev-parse --short HEAD).pkg"
+          if [ "${{ github.event_name }}" = release ]; then
+            name="p2f-ps4-${{ github.event.release.tag_name }}.pkg"
+          else
+            name="p2f-ps4-$(git rev-parse --short HEAD).pkg"
+          fi
           cp "$src" "$name"
           echo "file=$name" >> "$GITHUB_OUTPUT"
           echo "### PS4 pkg" >> "$GITHUB_STEP_SUMMARY"
@@ -86,8 +93,14 @@ jobs:
           path: ${{ steps.pkg.outputs.file }}
           if-no-files-found: error
 
+      - name: Attach the pkg to the release
+        if: github.event_name == 'release' && github.event.release.tag_name != 'latest'
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.pkg.outputs.file }}" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Update the "latest" pre-release
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
           gh release create latest "${{ steps.pkg.outputs.file }}" --prerelease \

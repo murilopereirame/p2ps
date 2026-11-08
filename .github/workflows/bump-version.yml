@@ -1,0 +1,48 @@
+# Bump the app version on main, by hand (Actions tab -> "Bump version" ->
+# Run workflow). It only changes VERSION in the Makefile and commits it; it
+# does not build or release anything. The pkg build (build-pkg.yml) is a
+# separate workflow.
+name: Bump version
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "minor (1.00 -> 1.01) or major (1.07 -> 2.00)"
+        type: choice
+        options: [minor, major]
+        default: minor
+      version:
+        description: "Or set this exact version (XX.YY); overrides bump"
+        required: false
+        default: ""
+
+concurrency:
+  group: bump-version
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Bump
+        id: bump
+        run: |
+          old=$(sed -n 's/^VERSION *:= *\([0-9.]*\) *$/\1/p' Makefile)
+          new=$(scripts/bump_version.sh "${INPUT_VERSION:-$INPUT_BUMP}")
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          echo "### Version $old -> $new" >> "$GITHUB_STEP_SUMMARY"
+        env:
+          INPUT_BUMP: ${{ inputs.bump }}
+          INPUT_VERSION: ${{ inputs.version }}
+      - name: Commit to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Bump version to ${{ steps.bump.outputs.new }}"
+          git push origin HEAD:main

@@ -8,7 +8,7 @@
 # and cJSON) from source. Its desktop build and tests live in that repo.
 
 TITLE       := p2f Downloader
-VERSION     := 1.00
+VERSION     := 1.10
 TITLE_ID    := PTOF00001
 CONTENT_ID  := IV0000-PTOF00001_00-P2FDOWNLOADER000
 

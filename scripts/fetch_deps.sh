@@ -1,17 +1,24 @@
 #!/usr/bin/env bash
-# Download the third-party sources at pinned versions into third_party/.
+# Get the build inputs:
+#   p2f-lib   the git submodule in p2f-lib/ (pinned commit), plus its own
+#             third-party sources (mbedTLS, cJSON). The Makefile builds its
+#             PS4 library from source.
+#   font8x8   the 8x8 font (public domain), pinned commit, in third_party/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p third_party
-cd third_party
 
 fetch() { # dir url ref
-  if [ -d "$1" ]; then echo "have $1"; return; fi
-  git clone -q "$2" "$1"
-  git -C "$1" checkout -q "$3"
+  if [ -d "third_party/$1" ]; then echo "have $1"; return; fi
+  git clone -q "$2" "third_party/$1"
+  git -C "third_party/$1" checkout -q "$3"
   echo "got $1 @ $3"
 }
 
-fetch mbedtls  https://github.com/Mbed-TLS/mbedtls.git  mbedtls-3.6.2      # Apache-2.0
-fetch cJSON    https://github.com/DaveGamble/cJSON.git  6d9f2443ab071f86e5d9b43025a40929ec41c46c  # MIT, 1.7.19
-fetch font8x8  https://github.com/dhepper/font8x8.git   8e279d2d864e79128e96188a6b9526cfa3fbfef9  # public domain
+fetch font8x8 https://github.com/dhepper/font8x8.git 8e279d2d864e79128e96188a6b9526cfa3fbfef9
+
+if [ ! -f p2f-lib/Makefile ]; then
+  git submodule update --init p2f-lib
+fi
+p2f-lib/scripts/fetch_deps.sh
+echo "p2f-lib $(tr -d '[:space:]' < p2f-lib/VERSION) @ $(git -C p2f-lib rev-parse --short HEAD)"

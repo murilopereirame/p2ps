@@ -235,7 +235,8 @@ static void *worker(void *arg)
     for (;;) {
         char *remote;
         int rc = P2F_OK, attempt;
-        p2f_download_opts opts = { on_progress, NULL, 1, 30000 };
+        /* prepare_timeout_ms 0: wait for the server as long as it takes. */
+        p2f_download_opts opts = { on_progress, NULL, 1, 30000, 0 };
 
         pthread_mutex_lock(&lock);
         while (q_len == 0)
@@ -438,7 +439,22 @@ static void draw(void)
 
     /* Download panel. */
     gfx_rect(60, 790, 1800, 200, C_PANEL);
-    if (active) {
+    if (active && prog.preparing) {
+        /* The server reads and hashes a big file once before it can send
+         * it. That can take minutes; the library waits (Square stops). */
+        double frac = prog.prepare_total ? (double)prog.prepare_done / (double)prog.prepare_total : 0.0;
+        gfx_text(90, 810, 3, C_TEXT, name, 62);
+        gfx_rect(90, 855, 1740, 30, 0x2c3240);
+        gfx_rect(90, 855, (int)(1740 * frac), 30, C_DIM);
+        if (prog.prepare_total) {
+            human(prog.prepare_done, a, sizeof(a));
+            human(prog.prepare_total, b, sizeof(b));
+            snprintf(buf, sizeof(buf), "Server is preparing the file: %s of %s", a, b);
+        } else {
+            snprintf(buf, sizeof(buf), "Server is preparing the file (large files take a while)...");
+        }
+        gfx_text(90, 900, 3, C_DIM, buf, 0);
+    } else if (active) {
         double frac = prog.bytes_total ? (double)prog.bytes_done / (double)prog.bytes_total : 0.0;
         snprintf(buf, sizeof(buf), "%s", name);
         gfx_text(90, 810, 3, C_TEXT, buf, 62);

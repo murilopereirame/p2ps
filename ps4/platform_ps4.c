@@ -1,5 +1,5 @@
 /*
- * Platform layer for the PS4 (OpenOrbis toolchain).
+ * The p2f-lib platform hooks (p2f_platform.h) for the PS4 (OpenOrbis).
  *   random:  FreeBSD sysctl kern.arandom (the PS4 kernel is FreeBSD 9)
  *   resolve: 1. the system resolver (libSceNet: init, pool, resolver)
  *            2. fallback: a direct DNS query to the DNS servers in the
@@ -11,7 +11,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#include "p2f_internal.h"
+#include "p2f_platform.h"
 
 /* libkernel exports sysctl; the SDK has no sys/sysctl.h. */
 int sysctl(const int *name, unsigned int namelen, void *oldp, size_t *oldlenp,
@@ -135,4 +135,19 @@ int p2f_platform_resolve(const char *host, struct in_addr *out,
              dns1[0] ? e1 : "no DNS server in network settings",
              e2[0] ? "; " : "", e2);
     return -1;
+}
+
+/* libkernel */
+int sceKernelUsleep(unsigned int microseconds);
+uint64_t sceKernelGetProcessTime(void);  /* microseconds since start */
+
+void p2f_platform_sleep_ms(int ms)
+{
+    if (ms > 0)
+        sceKernelUsleep((unsigned int)ms * 1000u);
+}
+
+uint64_t p2f_platform_now_ms(void)
+{
+    return sceKernelGetProcessTime() / 1000u;
 }

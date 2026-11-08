@@ -1,11 +1,11 @@
 # PS4 build of p2f (OpenOrbis PS4 Toolchain).
-#   scripts/fetch_deps.sh            # p2f-lib (PS4 build) + font8x8
+#   scripts/fetch_deps.sh            # p2f-lib submodule + its sources, font8x8
 #   export OO_PS4_TOOLCHAIN=/path/to/PS4Toolchain
 #   make            -> IV0000-PTOF00001_00-P2FDOWNLOADER000.pkg
 #
-# The download client is p2f-lib (third_party/p2f-lib/lib/libp2f.a, which
-# already holds mbedTLS and cJSON). Its desktop build and tests live in
-# the p2f-lib repository.
+# The download client is p2f-lib, a git submodule in p2f-lib/. make builds
+# its PS4 library (p2f-lib/build/ps4/libp2f.a, which already holds mbedTLS
+# and cJSON) from source. Its desktop build and tests live in that repo.
 
 TITLE       := p2f Downloader
 VERSION     := 1.00
@@ -21,12 +21,14 @@ UNAME_S     := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)
 CC          := clang
 LD          := ld.lld
+AR          := llvm-ar
 CDIR        := linux
 endif
 ifeq ($(UNAME_S),Darwin)
 LLVM        ?= $(shell brew --prefix llvm 2>/dev/null || echo /usr/local/opt/llvm)
 CC          := $(LLVM)/bin/clang
 LD          := $(LLVM)/bin/ld.lld
+AR          := $(LLVM)/bin/llvm-ar
 CDIR        := macos
 endif
 TOOLBIN     := $(TOOLCHAIN)/bin/$(CDIR)
@@ -35,7 +37,7 @@ TOOLBIN     := $(TOOLCHAIN)/bin/$(CDIR)
 export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT := 1
 
 BUILD       := build/ps4
-P2FLIB      := third_party/p2f-lib
+P2FLIB      := p2f-lib
 FONT        := third_party/font8x8
 
 LIBS        := -lc -lkernel -lSceVideoOut -lScePad -lSceUserService \
@@ -49,7 +51,7 @@ LDFLAGS     := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
 
 SRC         := ps4/main.c ps4/gfx.c ps4/platform_ps4.c
 OBJS        := $(patsubst %.c,$(BUILD)/%.o,$(SRC))
-LIBP2F      := $(P2FLIB)/lib/libp2f.a
+LIBP2F      := $(P2FLIB)/build/ps4/libp2f.a
 
 # Packaging inputs. Firmware modules and the "about" file come from the
 # toolchain; they are not part of this repository.
@@ -105,12 +107,17 @@ $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -Wall -c -o $@ $<
 
-$(LIBP2F):
-	@echo "$(LIBP2F) is missing: run scripts/fetch_deps.sh"; exit 1
+# Always ask p2f-lib's own Makefile: it rebuilds only what changed (for
+# example after the submodule moves to a new commit).
+$(LIBP2F): FORCE
+	@test -f $(P2FLIB)/Makefile -a -d $(P2FLIB)/third_party/mbedtls || \
+	  { echo "p2f-lib is missing: run scripts/fetch_deps.sh"; exit 1; }
+	$(MAKE) -C $(P2FLIB) ps4 PS4_CC=$(CC) PS4_AR=$(AR) OO_PS4_TOOLCHAIN=$(TOOLCHAIN)
 
 $(OBJS): $(P2FLIB)/include/p2f.h
 
 clean:
-	rm -rf $(BUILD) $(CONTENT_ID).pkg
+	rm -rf $(BUILD) $(CONTENT_ID).pkg $(P2FLIB)/build/ps4
 
-.PHONY: all clean
+.PHONY: all clean FORCE
+FORCE:

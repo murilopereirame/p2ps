@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Get the build inputs into third_party/:
-#   p2f-lib   the PS4 build of p2f-lib (header + libp2f.a), version in
-#             P2F_LIB_VERSION, from its GitHub release.
-#             P2F_LIB_SRC=/path/to/p2f-lib builds it from a local checkout
-#             instead (needs OO_PS4_TOOLCHAIN).
-#   font8x8   the 8x8 font (public domain), pinned commit.
+# Get the build inputs:
+#   p2f-lib   the git submodule in p2f-lib/ (pinned commit), plus its own
+#             third-party sources (mbedTLS, cJSON). The Makefile builds its
+#             PS4 library from source.
+#   font8x8   the 8x8 font (public domain), pinned commit, in third_party/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p third_party
@@ -18,24 +17,8 @@ fetch() { # dir url ref
 
 fetch font8x8 https://github.com/dhepper/font8x8.git 8e279d2d864e79128e96188a6b9526cfa3fbfef9
 
-want=$(tr -d '[:space:]' < P2F_LIB_VERSION)
-lib=third_party/p2f-lib
-
-if [ -n "${P2F_LIB_SRC:-}" ]; then
-  echo "building p2f-lib from $P2F_LIB_SRC"
-  (cd "$P2F_LIB_SRC" && scripts/fetch_deps.sh >/dev/null && make ps4 dist-ps4 PS4_AR="${PS4_AR:-llvm-ar}")
-  have=$(tr -d '[:space:]' < "$P2F_LIB_SRC/VERSION")
-  rm -rf "$lib" && mkdir -p "$lib"
-  tar -xzf "$P2F_LIB_SRC/dist/p2f-lib-$have-ps4.tar.gz" -C "$lib" --strip-components=1
-  echo "p2f-lib $have (local build)"
-  exit 0
+if [ ! -f p2f-lib/Makefile ]; then
+  git submodule update --init p2f-lib
 fi
-
-if [ -f "$lib/VERSION" ] && [ "$(tr -d '[:space:]' < "$lib/VERSION")" = "$want" ]; then
-  echo "have p2f-lib $want"
-  exit 0
-fi
-url="https://github.com/murilopereirame/p2f-lib/releases/download/v$want/p2f-lib-$want-ps4.tar.gz"
-rm -rf "$lib" && mkdir -p "$lib"
-curl -fsSL "$url" | tar -xz -C "$lib" --strip-components=1
-echo "got p2f-lib $want"
+p2f-lib/scripts/fetch_deps.sh
+echo "p2f-lib $(tr -d '[:space:]' < p2f-lib/VERSION) @ $(git -C p2f-lib rev-parse --short HEAD)"

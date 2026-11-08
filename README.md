@@ -22,8 +22,8 @@ From p2f-lib:
 | Path | Contents |
 |---|---|
 | `ps4/` | The PS4 app: screen, controller, download queue, and `platform_ps4.c` (the p2f-lib platform hooks: random, DNS, sleep, clock). |
-| `P2F_LIB_VERSION` | The p2f-lib release this app builds with. |
-| `scripts/fetch_deps.sh` | Downloads that p2f-lib release (PS4 build) and the font. |
+| `p2f-lib/` | p2f-lib as a git submodule, pinned to one commit. `make` builds its PS4 library from source. |
+| `scripts/fetch_deps.sh` | Checks out the submodule, fetches p2f-lib's own sources (mbedTLS, cJSON) and the font. |
 | `Makefile` | PS4 build (`.pkg`). |
 | `.github/workflows/build-pkg.yml` | CI: builds the `.pkg` on merges to `main` and on demand. |
 
@@ -31,19 +31,21 @@ From p2f-lib:
 
 - A jailbroken PS4 with a homebrew enabler (for example GoldHEN).
 - The [OpenOrbis PS4 Toolchain](https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain) (tested with v0.5.2).
-- `clang` and `ld.lld` (LLVM). On macOS: `brew install llvm`.
+- `clang`, `ld.lld` and `llvm-ar` (LLVM). On macOS: `brew install llvm`.
 - A peer-to-file server that the PS4 can reach over HTTP or HTTPS.
 
 ## Build
 
 ```sh
-scripts/fetch_deps.sh                       # p2f-lib (release in P2F_LIB_VERSION), font8x8
+git clone --recurse-submodules https://github.com/murilopereirame/p2ps.git
+cd p2ps
+scripts/fetch_deps.sh                       # submodule + mbedTLS, cJSON, font8x8
 export OO_PS4_TOOLCHAIN=/path/to/PS4Toolchain
 make                                        # -> IV0000-PTOF00001_00-P2FDOWNLOADER000.pkg
 ```
 
-To build with a local p2f-lib checkout instead of the release:
-`P2F_LIB_SRC=../p2f-lib scripts/fetch_deps.sh` (needs `llvm-ar`).
+`make` builds `p2f-lib/build/ps4/libp2f.a` first. To try a p2f-lib change,
+edit or check out another commit inside `p2f-lib/` and run `make` again.
 
 ### CI
 
@@ -125,7 +127,12 @@ If the name exists only in your LAN or VPN, set `dns` to the DNS server that kno
 ## Library
 
 See [p2f-lib](https://github.com/murilopereirame/p2f-lib) (`include/p2f.h`).
-To move to a new p2f-lib release, change `P2F_LIB_VERSION`.
+To move to a new p2f-lib version:
+
+```sh
+git -C p2f-lib fetch --tags && git -C p2f-lib checkout v0.3.0
+git add p2f-lib && git commit -m "Use p2f-lib 0.3.0"
+```
 
 ## Licenses
 

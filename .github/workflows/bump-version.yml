@@ -1,7 +1,8 @@
 # Bump the app version on main, by hand (Actions tab -> "Bump version" ->
-# Run workflow). It only changes VERSION in the Makefile and commits it; it
-# does not build or release anything. The pkg build (build-pkg.yml) is a
-# separate workflow.
+# Run workflow). It changes VERSION in the Makefile, commits it to main and
+# tags that commit v<version> (for example v1.01). It does not build or
+# release anything: publish a release from the tag to get the pkg
+# (build-pkg.yml, a separate workflow).
 name: Bump version
 
 on:
@@ -35,14 +36,21 @@ jobs:
         run: |
           old=$(sed -n 's/^VERSION *:= *\([0-9.]*\) *$/\1/p' Makefile)
           new=$(scripts/bump_version.sh "${INPUT_VERSION:-$INPUT_BUMP}")
+          if git ls-remote --exit-code --tags origin "refs/tags/v$new" >/dev/null; then
+            echo "::error::tag v$new already exists"
+            exit 1
+          fi
           echo "new=$new" >> "$GITHUB_OUTPUT"
           echo "### Version $old -> $new" >> "$GITHUB_STEP_SUMMARY"
         env:
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
-      - name: Commit to main
+      - name: Commit to main and tag
         run: |
+          v=${{ steps.bump.outputs.new }}
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Bump version to ${{ steps.bump.outputs.new }}"
-          git push origin HEAD:main
+          git commit -am "Bump version to $v"
+          git tag -a "v$v" -m "p2f for PS4 $v"
+          git push --atomic origin HEAD:main "refs/tags/v$v"
+          echo "Tagged \`v$v\`" >> "$GITHUB_STEP_SUMMARY"

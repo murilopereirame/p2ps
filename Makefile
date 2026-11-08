@@ -1,8 +1,11 @@
 # PS4 build of p2f (OpenOrbis PS4 Toolchain).
+#   scripts/fetch_deps.sh            # p2f-lib (PS4 build) + font8x8
 #   export OO_PS4_TOOLCHAIN=/path/to/PS4Toolchain
 #   make            -> IV0000-PTOF00001_00-P2FDOWNLOADER000.pkg
 #
-# Desktop test build: make -f Makefile.host
+# The download client is p2f-lib (third_party/p2f-lib/lib/libp2f.a, which
+# already holds mbedTLS and cJSON). Its desktop build and tests live in
+# the p2f-lib repository.
 
 TITLE       := p2f Downloader
 VERSION     := 1.00
@@ -32,8 +35,7 @@ TOOLBIN     := $(TOOLCHAIN)/bin/$(CDIR)
 export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT := 1
 
 BUILD       := build/ps4
-MBEDTLS     := third_party/mbedtls
-CJSON       := third_party/cJSON
+P2FLIB      := third_party/p2f-lib
 FONT        := third_party/font8x8
 
 LIBS        := -lc -lkernel -lSceVideoOut -lScePad -lSceUserService \
@@ -41,17 +43,13 @@ LIBS        := -lc -lkernel -lSceVideoOut -lScePad -lSceUserService \
 
 CFLAGS      := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -O2 \
                -isysroot $(TOOLCHAIN) -isystem $(TOOLCHAIN)/include \
-               -Icore -Ips4 -I$(MBEDTLS)/include -I$(CJSON) -I$(FONT) \
-               -DMBEDTLS_CONFIG_FILE='"p2f_mbedtls_config.h"' -DP2F_PS4
+               -Ips4 -I$(P2FLIB)/include -I$(FONT) -DP2F_PS4
 LDFLAGS     := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
                -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
 
-SRC         := ps4/main.c ps4/gfx.c ps4/platform_ps4.c \
-               core/p2f_client.c core/p2f_http.c core/p2f_crypto.c \
-               core/p2f_download.c core/p2f_tls.c core/p2f_dns.c core/ca_bundle.c $(CJSON)/cJSON.c
-MBED_SRC    := $(wildcard $(MBEDTLS)/library/*.c)
+SRC         := ps4/main.c ps4/gfx.c
 OBJS        := $(patsubst %.c,$(BUILD)/%.o,$(SRC))
-MBED_OBJS   := $(patsubst %.c,$(BUILD)/%.o,$(MBED_SRC))
+LIBP2F      := $(P2FLIB)/lib/libp2f.a
 
 # Packaging inputs. Firmware modules and the "about" file come from the
 # toolchain; they are not part of this repository.
@@ -70,9 +68,9 @@ $(PKGDIR)/pkg.gp4: $(PKGDIR)/eboot.bin $(PKGDIR)/sce_sys/param.sfo \
 	  --content-id=$(CONTENT_ID) \
 	  --files "eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx sce_module/libc.prx sce_module/libSceFios2.prx"
 
-$(PKGDIR)/eboot.bin: $(OBJS) $(MBED_OBJS)
+$(PKGDIR)/eboot.bin: $(OBJS) $(LIBP2F)
 	@mkdir -p $(PKGDIR)
-	$(LD) $^ -o $(BUILD)/p2f.elf $(LDFLAGS)
+	$(LD) $(OBJS) $(LIBP2F) -o $(BUILD)/p2f.elf $(LDFLAGS)
 	$(TOOLBIN)/create-fself -in=$(BUILD)/p2f.elf -out=$(BUILD)/p2f.oelf \
 	  --eboot $@ --paid 0x3800000000000011
 
@@ -103,16 +101,14 @@ $(PKGDIR)/sce_module/%.prx:
 	@mkdir -p $(dir $@)
 	cp $(TOOLCHAIN)/samples/hello_world/sce_module/$*.prx $@
 
-$(BUILD)/$(MBEDTLS)/%.o: $(MBEDTLS)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -w -c -o $@ $<
-
 $(BUILD)/%.o: %.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -Wall -c -o $@ $<
 
-# Every object depends on the mbedTLS config.
-$(OBJS) $(MBED_OBJS): core/p2f_mbedtls_config.h
+$(LIBP2F):
+	@echo "$(LIBP2F) is missing: run scripts/fetch_deps.sh"; exit 1
+
+$(OBJS): $(P2FLIB)/include/p2f.h
 
 clean:
 	rm -rf $(BUILD) $(CONTENT_ID).pkg

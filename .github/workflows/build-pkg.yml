@@ -1,0 +1,98 @@
+# Build the PS4 .pkg on every merge to main, or by hand (Actions tab ->
+# "Build PS4 pkg" -> Run workflow).
+#
+# The pkg is kept as a workflow artifact. A build from main also updates the
+# "latest" pre-release, so the newest pkg is always at
+# https://github.com/<owner>/<repo>/releases/tag/latest
+name: Build PS4 pkg
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      p2f_lib_ref:
+        description: "Build p2f-lib from this branch/tag/commit instead of the release in P2F_LIB_VERSION (leave empty for the release)"
+        required: false
+        default: ""
+
+concurrency:
+  group: build-pkg-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OO_VERSION: v0.5.2
+
+jobs:
+  pkg:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang lld llvm
+          # PkgTool.Core (OpenOrbis) needs OpenSSL 1.1, which Ubuntu 24.04 no longer ships.
+          curl -fsSLO http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb
+          dpkg-deb -x libssl1.1_1.1.1f-1ubuntu2_amd64.deb "$RUNNER_TEMP/ssl11"
+          echo "LD_LIBRARY_PATH=$RUNNER_TEMP/ssl11/usr/lib/x86_64-linux-gnu" >> "$GITHUB_ENV"
+
+      - name: Cache OpenOrbis toolchain
+        id: oo-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/PS4Toolchain
+          key: openorbis-${{ env.OO_VERSION }}
+      - name: Install OpenOrbis toolchain
+        if: steps.oo-cache.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/$OO_VERSION/$OO_VERSION.tar.gz" \
+            | tar xz -C "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/OpenOrbis/PS4Toolchain" "$RUNNER_TEMP/PS4Toolchain"
+      - run: echo "OO_PS4_TOOLCHAIN=$RUNNER_TEMP/PS4Toolchain" >> "$GITHUB_ENV"
+
+      - name: p2f-lib from source
+        if: inputs.p2f_lib_ref != ''
+        uses: actions/checkout@v4
+        with:
+          repository: murilopereirame/p2f-lib
+          ref: ${{ inputs.p2f_lib_ref }}
+          path: p2f-lib-src
+      - name: Fetch dependencies
+        run: |
+          if [ -d p2f-lib-src ]; then export P2F_LIB_SRC="$PWD/p2f-lib-src"; fi
+          scripts/fetch_deps.sh
+          echo "P2F_LIB_BUILT=$(cat third_party/p2f-lib/VERSION)" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Name the pkg
+        id: pkg
+        run: |
+          src=$(ls *.pkg)
+          name="p2f-ps4-$(git rev-parse --short HEAD).pkg"
+          cp "$src" "$name"
+          echo "file=$name" >> "$GITHUB_OUTPUT"
+          echo "### PS4 pkg" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$name\`, $(stat -c %s "$name") bytes, p2f-lib $P2F_LIB_BUILT" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.file }}
+          path: ${{ steps.pkg.outputs.file }}
+          if-no-files-found: error
+
+      - name: Update the "latest" pre-release
+        if: github.ref == 'refs/heads/main'
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest "${{ steps.pkg.outputs.file }}" --prerelease \
+            --target "$GITHUB_SHA" --title "Latest build (main)" \
+            --notes "Built from $GITHUB_SHA with p2f-lib $P2F_LIB_BUILT. Install the .pkg with a homebrew enabler (for example GoldHEN)."
+        env:
+          GH_TOKEN: ${{ github.token }}

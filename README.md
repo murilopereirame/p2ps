@@ -2,25 +2,30 @@
 
 A PS4 homebrew app that downloads files from a
 [peer-to-file](https://github.com/murilopereirame/peer-to-file) server.
-It is a C port of [p2f-lib](https://github.com/murilopereirame/p2f-lib).
+The download client is [p2f-lib](https://github.com/murilopereirame/p2f-lib),
+the same C library that peer-to-file's apps use (as WebAssembly). This
+repository is the PS4 app around it: screen, controller, queue.
 
-The wire protocol and the crypto are the same as in p2f-lib:
+From p2f-lib:
 
 - Bearer token authentication.
 - Resumable downloads. A stopped file keeps its bytes. The next try continues from that byte (HTTP `Range`).
 - AES-256-CTR decrypt during the download. The key is ECDH-wrapped (P-256, HKDF-SHA256, AES-256-GCM).
 - SHA-256 check of each finished file.
 - HTTP or HTTPS (TLS 1.2). HTTPS checks the server certificate.
+- Large files: the server reads and hashes a file once before it can send
+  it, which takes minutes for a big file. The app shows "Server is preparing
+  the file" and waits (Square stops it) instead of failing.
 
 ## Layout
 
 | Path | Contents |
 |---|---|
-| `core/` | The portable C library (`p2f.h`). No PS4 code. |
-| `ps4/` | The PS4 app: screen, controller, download queue, PS4 platform layer. |
-| `tools/` | Desktop test tool, mock server, test script. |
+| `ps4/` | The PS4 app: screen, controller, download queue. |
+| `P2F_LIB_VERSION` | The p2f-lib release this app builds with. |
+| `scripts/fetch_deps.sh` | Downloads that p2f-lib release (PS4 build) and the font. |
 | `Makefile` | PS4 build (`.pkg`). |
-| `Makefile.host` | Desktop build of the library and `p2f-cli`. |
+| `.github/workflows/build-pkg.yml` | CI: builds the `.pkg` on merges to `main` and on demand. |
 
 ## Requirements
 
@@ -32,34 +37,31 @@ The wire protocol and the crypto are the same as in p2f-lib:
 ## Build
 
 ```sh
-scripts/fetch_deps.sh                       # mbedTLS, cJSON, font8x8
+scripts/fetch_deps.sh                       # p2f-lib (release in P2F_LIB_VERSION), font8x8
 export OO_PS4_TOOLCHAIN=/path/to/PS4Toolchain
 make                                        # -> IV0000-PTOF00001_00-P2FDOWNLOADER000.pkg
 ```
+
+To build with a local p2f-lib checkout instead of the release:
+`P2F_LIB_SRC=../p2f-lib scripts/fetch_deps.sh` (needs `llvm-ar`).
+
+### CI
+
+`.github/workflows/build-pkg.yml` builds the `.pkg` on every merge to `main`
+and when started by hand (Actions -> "Build PS4 pkg" -> Run workflow; you can
+name a p2f-lib branch to build against). The `.pkg` is a workflow artifact,
+and builds from `main` also update the
+[`latest` pre-release](../../releases/tag/latest).
 
 `PkgTool.Core` (from the toolchain) needs OpenSSL **1.1**. If the build stops with
 "No usable version of libssl was found", put `libssl.so.1.1` and `libcrypto.so.1.1`
 on `LD_LIBRARY_PATH` (Linux) or use the toolchain's Docker image.
 
-## Desktop tests
+## Tests
 
-```sh
-make -f Makefile.host
-tools/test_host.sh
-```
-
-The tests start a mock server (Node 20+) with the same crypto as the real server.
-They check: folder and file download, listing, bad token, missing path,
-stop and resume, connection loss and resume, resume from an odd byte offset,
-a server that ignores `Range`, a bad local file, a checksum failure, and skip of complete files.
-
-The HTTPS tests (Python `cryptography` makes the test certificates) check:
-RSA and ECDSA certificates, a private CA, a self-signed certificate,
-an IP address in the URL, resume over TLS, and the rejection of an unknown CA,
-a wrong host name and an expired certificate.
-
-The DNS tests use a mock DNS server: A record, CNAME chain, NXDOMAIN,
-no A record, and a server that does not answer.
+The client tests (desktop build of the library against a mock server: resume,
+connection loss, checksum, HTTPS, DNS, large-file preparing) are in p2f-lib:
+`make test` there.
 
 ## Use on the PS4
 
@@ -99,7 +101,7 @@ The log is in `/data/p2f/p2f.log`.
 - The certificate must name the host in `url` (DNS name or IP address).
 - The PS4 clock must be correct. A wrong date makes valid certificates fail.
 - TLS 1.2 only. Nginx, Caddy, Traefik and Cloudflare accept TLS 1.2 by default.
-- To update the CA list: `scripts/gen_ca_bundle.py <cacert.pem>` (see the script header).
+- The CA list is part of p2f-lib (`scripts/gen_ca_bundle.py` there).
 
 ### Host names (DNS)
 
@@ -120,30 +122,14 @@ If the name exists only in your LAN or VPN, set `dns` to the DNS server that kno
 - A USB drive is at `/mnt/usb0`. FAT32 cannot keep files larger than 4 GB. Use exFAT.
 - Text on screen uses an 8x8 font with Latin-1 characters. Other characters show as `?`.
 
-## Library API
+## Library
 
-See `core/p2f.h`. The main calls:
-
-```c
-p2f_client *c;
-p2f_client_new(&c, "https://files.example.com", "p2f_...", 0);
-p2f_client_set_ca_file(c, "/data/p2f/ca.pem");   /* optional */
-p2f_set_dns_server("1.1.1.1");                   /* optional, global */
-p2f_download_opts o = { on_progress, user, 1 /* verify */, 60000 /* idle ms */ };
-int rc = p2f_download_path(c, "movies/Film.2024", "/data/p2f/downloads", &o, NULL, 0);
-if (p2f_is_retryable(rc)) { /* call again: it resumes */ }
-p2f_client_free(c);
-```
-
-## Differences from p2f-lib
-
-- An empty remote file makes an empty local file. (p2f-lib does not make the file.)
-- `P2F_ERR_SHORT` replaces the "file is short" exception. `p2f_is_retryable()` tells which errors to retry.
-- A network error during the body becomes `P2F_ERR_SHORT`, so the retry resumes.
+See [p2f-lib](https://github.com/murilopereirame/p2f-lib) (`include/p2f.h`).
+To move to a new p2f-lib release, change `P2F_LIB_VERSION`.
 
 ## Licenses
 
 - This code: MIT (same as p2f-lib).
-- mbedTLS: Apache-2.0. cJSON: MIT. font8x8: public domain.
-- `core/ca_bundle.c`: Mozilla CA list (via certifi), MPL-2.0.
+- p2f-lib bundles mbedTLS (Apache-2.0), cJSON (MIT) and the Mozilla CA list
+  (MPL-2.0); see its `THIRD_PARTY.md`. font8x8: public domain.
 - `libc.prx`, `libSceFios2.prx` and `right.sprx` come from the OpenOrbis toolchain at build time. They are not in this repository.

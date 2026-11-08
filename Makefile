@@ -47,7 +47,7 @@ CFLAGS      := --target=x86_64-pc-freebsd12-elf -fPIC -funwind-tables -O2 \
 LDFLAGS     := -m elf_x86_64 -pie --script $(TOOLCHAIN)/link.x --eh-frame-hdr \
                -L$(TOOLCHAIN)/lib $(LIBS) $(TOOLCHAIN)/lib/crt1.o
 
-SRC         := ps4/main.c ps4/gfx.c
+SRC         := ps4/main.c ps4/gfx.c ps4/platform_ps4.c
 OBJS        := $(patsubst %.c,$(BUILD)/%.o,$(SRC))
 LIBP2F      := $(P2FLIB)/lib/libp2f.a
 

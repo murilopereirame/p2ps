@@ -21,7 +21,7 @@ From p2f-lib:
 
 | Path | Contents |
 |---|---|
-| `ps4/` | The PS4 app: screen, controller, download queue. |
+| `ps4/` | The PS4 app: screen, controller, download queue, and `platform_ps4.c` (the p2f-lib platform hooks: random, DNS, sleep, clock). |
 | `P2F_LIB_VERSION` | The p2f-lib release this app builds with. |
 | `scripts/fetch_deps.sh` | Downloads that p2f-lib release (PS4 build) and the font. |
 | `Makefile` | PS4 build (`.pkg`). |

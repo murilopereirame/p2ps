@@ -57,13 +57,13 @@ update the [`latest` pre-release](../../releases/tag/latest), and a release
 build attaches `p2f-ps4-<tag>.pkg` to its release.
 
 `.github/workflows/bump-version.yml` ("Bump version", run by hand) is
-separate: it only raises `VERSION` in the `Makefile` (the app version the PS4
-shows, `XX.YY`) and commits that to `main`. Pick `minor` (1.00 -> 1.01),
+separate: it raises `VERSION` in the `Makefile` (the app version the PS4
+shows, `XX.YY`), commits that to `main` and tags the commit `v<version>`. Pick `minor` (1.00 -> 1.01),
 `major` (1.07 -> 2.00), or type an exact version. Locally:
 `scripts/bump_version.sh minor`.
 
-To release: run "Bump version", then publish a release with a tag such as
-`v1.01`.
+To release: run "Bump version", then publish a release from the new tag
+(for example `v1.01`).
 
 `PkgTool.Core` (from the toolchain) needs OpenSSL **1.1**. If the build stops with
 "No usable version of libssl was found", put `libssl.so.1.1` and `libcrypto.so.1.1`

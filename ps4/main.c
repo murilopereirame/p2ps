@@ -404,8 +404,8 @@ static void draw(void)
     gfx_clear(C_BG);
 
     /* Header. */
-    gfx_text(80, 50, 5, C_TEXT, "p2f", 0);
-    gfx_text(220, 66, 3, C_DIM, "peer-to-file downloader", 0);
+    gfx_text(80, 50, 5, C_TEXT, "P2PS", 0);
+    gfx_text(280, 66, 3, C_DIM, "Powered by P2F", 0);
     snprintf(buf, sizeof(buf), "%s -> %s", cfg_url, cfg_dest);
     gfx_text(80, 120, 2, C_DIM, buf, 110);
 
@@ -498,7 +498,7 @@ static void draw(void)
 static void draw_message(const char *l1, const char *l2, const char *l3)
 {
     gfx_clear(C_BG);
-    gfx_text(80, 50, 5, C_TEXT, "p2f", 0);
+    gfx_text(80, 50, 5, C_TEXT, "P2PS", 0);
     gfx_text(80, 300, 3, C_ERR, l1, 0);
     if (l2)
         gfx_text(80, 360, 3, C_TEXT, l2, 0);

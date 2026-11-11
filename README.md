@@ -1,4 +1,4 @@
-# p2f for PS4
+# P2PS (powered by P2F)
 
 A PS4 homebrew app that downloads files from a
 [peer-to-file](https://github.com/murilopereirame/peer-to-file) server.
